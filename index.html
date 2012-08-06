@@ -1,0 +1,216 @@
+<html><head>
+ <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, target-densitydpi=device-dpi">
+ <title>TuftsViewer Protein Alignment</title>
+<style type='text/css'>
+	/*position and hide the menus initially - leave room for menu items to expand...*/
+	#menu {position:absolute; left:0; top:650px; visibility:hidden;}
+	#glmol0_seq {position:absolute; left:0; top:570px; visibility:hidden;}
+	#glmol1_seq {position:absolute; left:0; top:625px; visibility:hidden;}
+	/*position and hide the slide control...*/
+	#slide {visibility:hidden; position:absolute; top:645px; width:98%; height:15px; margin:0 1%; background-color:#444444;}
+	#slider {position:absolute; top:0; height:100%; background-color:#ff9900; cursor:pointer;}
+</style>
+</head>
+<body>
+<div style="text-align:center">
+<table style="text-align: center;">
+<tbody>
+<tr>
+<td>
+<div style="text-align:center">
+PDBID: <input id="glmol0_pdbid" value="1a6m" size=4><button onClick="download('glmol0','pdb:' + $('#glmol0_pdbid').val())">Download</button><br>
+</div>
+
+</td>
+<td>
+<div style="text-align:center">
+PDBID: <input id="glmol1_pdbid" value="1ash" size=4><button onClick="download('glmol1','pdb:' + $('#glmol1_pdbid').val())">Download</button><br>
+</div>
+</td>
+</tr>
+<tr>
+<td>
+<div id="glmol0" style="width: 450px; height: 450px; background-color: black;"></div>
+<textarea id="glmol0_src" style="display: none;"></textarea>
+</td>
+<td>
+<div id="glmol1" style="width: 450px; height: 450px; background-color: black;"></div>
+<textarea id="glmol1_src" style="display: none;"></textarea>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div>
+Zoom/Pan:<select id="drawSelect">
+<option selected="selected" value="Coupled">Coupled</option>
+<option value="Uncoupled">Not Coupled</option>
+</select>
+<button id="alignment" type="button" onclick="proteinAlignment();">Align Proteins</button>
+<a href="about.html">About</a>
+</div>
+<br/>
+<div>
+Amino Acids:
+<div id="page">
+<div id="glmol0_seq"></div>
+<div id="glmol1_seq"></div>
+<div id='menu'></div>
+<div id='slide'><div id='slider'><!-- empty --></div></div>
+</div>
+</div>
+
+<div id="loading" style="border: 2px solid white; position: absolute; color: white; left: 20%; top: 20%; padding: 5px;">
+<p>loading from the server... It may take a while.</p>
+<p>If you believe something went wrong, please make sure PDB ID is correct.</p></div>
+
+<div id="aligning" style="border: 2px solid white; position: absolute; color: white; left: 20%; top: 20%; padding: 5px;">
+<p>Protein alignment is running... It may take a while.</p>
+<p>If you believe something went wrong, please make sure PDB ID is correct.</p></div>
+
+<script src="js/jquery-1.7.min.js" type="text/javascript"></script>
+<script src="js/Three49custom.js" type="text/javascript"></script>
+<script src="js/GLmol.js" type="text/javascript"></script>
+<script src="js/openProteinViewer.js" type="text/javascript"></script>
+<script type='text/javascript' src='js/jquery.jqdock.min.js'></script>
+<script type="text/javascript">
+
+//load the silde bar for two protein sequence
+//we need two divs and their ids should be "glmol0_seq" and "glmol1_seq"
+//the code is from "http://www.wizzud.com/jqdock_examples_folder/example.gallery.html"
+function loadSlidebar(sequence){
+	var slideWidth, maxPageX, prevPageX;
+	var menu = sequence,
+	menuWidth = menu.width(),
+	pageLeft = menuWidth - $('#page').width(),
+	sliderRight = pageLeft > 0 ? pageLeft * 100 / menuWidth : 0;
+	prevRight = sliderRight,
+	slide = $('#slide'),
+    slider = $('#slider'),
+	seq0 = $('#glmol0_seq'),
+	seq1 = $('#glmol1_seq'),
+    
+    sliderMouseMove = function(ev){
+		if(prevPageX && prevPageX !== ev.pageX){
+			var newRight = Math.min(sliderRight, Math.max(0, prevRight + ((prevPageX - ev.pageX) * 100 / slideWidth)));
+			prevPageX = ev.pageX;
+			if(prevRight !== newRight){
+				prevRight = newRight;
+				slider.stop().css({right:newRight + '%'});
+				seq0.stop().css({left:-pageLeft * (sliderRight - newRight) / sliderRight});
+				seq1.stop().css({left:-pageLeft * (sliderRight - newRight) / sliderRight});
+            }
+		}
+		return false;
+    },
+    slideMouseOn = function(ev){
+        var newRight = Math.min(sliderRight, Math.max(0, (maxPageX - ev.pageX) * 100 / slideWidth)),
+        speed = Math.abs(prevRight - newRight);
+        if(speed){
+			prevRight = newRight;
+			speed = 400 + (speed * 600 / sliderRight);
+			slider.stop().animate({right:newRight + '%'}, speed);
+			seq0.stop().animate({left:-pageLeft * (sliderRight - newRight) / sliderRight}, speed);
+			seq1.stop().animate({left:-pageLeft * (sliderRight - newRight) / sliderRight}, speed);
+        }
+        return false;
+    },
+    sliderMouseOn = function(ev){
+        var off = ev.type === 'mouseleave';
+        prevPageX = off ? 0 : ev.pageX;
+		seq0[off ? 'unbind' : 'bind']('mousemove', sliderMouseMove);
+		seq1[off ? 'unbind' : 'bind']('mousemove', sliderMouseMove);
+        return false;
+    };
+    if(sliderRight){
+		slideWidth = slide.width();
+		maxPageX = slide.offset().left + slideWidth
+		- ( slider.css({width:(100 - sliderRight) + '%', right:sliderRight + '%'}).width() / 2 );
+		slider.hover(sliderMouseOn);
+		slide.mouseenter(slideMouseOn).css({visibility:'visible'});
+    }else{
+        // dumpt the slide if it's not needed...
+        //slide.remove();
+		slider.removeAttr("style");
+		slide.removeAttr("style");	
+		seq0.css('left','0px');
+		seq1.css('left','0px');
+    }
+};
+
+jQuery(document).ready(function($){
+  // override the default onReady...
+  // when the menu is ready, set up the top slider for the
+  // Dock width exceeds the width of the viewport...
+  $.jqdock.defaults.onReady = function(){
+		var sequence0, sequence1;
+		sequence0 = $('#glmol0_seq').width();
+		sequence1 = $('#glmol1_seq').width();
+		if(sequence0 == 0 && sequence1 == 0){
+			return;
+		}
+		if(sequence0 == 0 && sequence1 != 0){
+			loadSlidebar($('#glmol1_seq'));
+			return;
+		}
+		if(sequence0 !=0 && sequence1 == 0){
+			loadSlidebar($('#glmol0_seq'));
+			return;
+		}
+		if(sequence0 >= sequence1){
+			loadSlidebar($('#glmol0_seq'));
+			return;
+		}else{
+			loadSlidebar($('#glmol1_seq'));
+			return;
+		}		
+	};
+});
+//we need two divs which show the 3D proteins and their id should be "glmol0" and "glmol1"
+//we also need two textareas and their id should be "glmol0_src" and "glmol0_src"
+//The two string arguments pass into TuftsViwer constructor should be the same as the id of the tow divs which show the 3D proteins
+var view = new TuftsViewer("glmol0", "glmol1");
+
+//download a protein
+function download(molecule, query){
+	view.download(molecule,query);
+}
+
+function drawSelectChanged(){
+	view.drawSelectChanged();
+} 
+
+function highLightAlignedMolecule(mol,atomlist){
+	view.highLightAlignedMolecule(mol,atomlist);
+}
+
+function unHighLightAlignedMolecule(mol, atomlist){
+	view.unHighLightAlignedMolecule(mol, atomlist);
+}
+
+function enterImage(mol,imgIndex){
+	view.enterImage(mol,imgIndex);
+}
+
+function leaveImage(mol){
+	view.leaveImage(mol);
+}
+
+function proteinAlignment(){	
+	view.proteinAlignment();
+}
+
+function highLightAlignedSequence(index){
+	view.highLightAlignedSequence(index);
+}
+
+$("#drawSelect").change(drawSelectChanged);
+drawSelectChanged();
+
+$('#loading').hide();
+$('#aligning').hide();
+</script>
+
+</body>
+</html>
